@@ -1,0 +1,37 @@
+{
+	"schemaVersion": 1,
+	"id": "chiseledinfusion",
+	"version": "${version}",
+	"name": "Chiseled Infusion",
+	"description": "Reworked enchanting! Diegetic deterministic enchanting using Chiseled Bookshelves - Port of Re_Enchanting v2 to Minecraft 26.2.",
+	"authors": [
+		"sdrumati"
+	],
+	"contact": {
+		"repo": "https://github.com/sdrumati04/ChiseledInfusion"
+	},
+	"license": "CC0-1.0",
+	"icon": "assets/chiseledinfusion/icon.png",
+	"environment": "*",
+	"entrypoints": {
+		"main": [
+			"sdrumati.ChiseledInfusion"
+		],
+		"client": [
+			"sdrumati.client.ChiseledInfusionClient"
+		]
+	},
+	"mixins": [
+		"chiseledinfusion.mixins.json",
+		{
+			"config": "chiseledinfusion.client.mixins.json",
+			"environment": "client"
+		}
+	],
+	"depends": {
+		"fabricloader": ">=0.19.5",
+		"minecraft": "~26.2",
+		"java": ">=25",
+		"fabric-api": "*"
+	}
+}
