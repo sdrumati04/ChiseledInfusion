@@ -10,6 +10,7 @@
   "message.chiseledinfusion.not_enough_catalyst": "Catalizzatore insufficiente (%sx %s)",
   "message.chiseledinfusion.not_enough_bookshelves": "Librerie insufficienti (%s/%s)",
   "message.chiseledinfusion.no_books_found": "Nessun libro incantato vicino",
+  "message.chiseledinfusion.not_applicable": "Nessun incantesimo compatibile con questo oggetto",
   "message.chiseledinfusion.max_enchantments": "Livello massimo già raggiunto",
   "message.chiseledinfusion.success": "Infusione completata!"
 }

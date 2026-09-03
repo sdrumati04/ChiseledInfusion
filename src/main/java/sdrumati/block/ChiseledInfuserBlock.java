@@ -50,6 +50,14 @@ public class ChiseledInfuserBlock extends Block {
 		return true;
 	}
 
+	public static boolean isAnyBookshelf(Level level, BlockPos checkPos) {
+		BlockState bs = level.getBlockState(checkPos);
+		return bs.is(Blocks.BOOKSHELF)
+				|| bs.is(Blocks.CHISELED_BOOKSHELF)
+				|| bs.is(BlockTags.ENCHANTMENT_POWER_PROVIDER)
+				|| level.getBlockEntity(checkPos) instanceof ChiseledBookShelfBlockEntity;
+	}
+
 	@Override
 	public void animateTick(BlockState state, Level level, BlockPos pos, RandomSource random) {
 		super.animateTick(state, level, pos, random);
@@ -73,8 +81,7 @@ public class ChiseledInfuserBlock extends Block {
 		for (BlockPos offset : BOOKSHELF_OFFSETS) {
 			if (random.nextInt(16) == 0) {
 				BlockPos checkPos = pos.offset(offset);
-				BlockState bs = level.getBlockState(checkPos);
-				if (bs.is(Blocks.BOOKSHELF) || level.getBlockEntity(checkPos) instanceof ChiseledBookShelfBlockEntity) {
+				if (isAnyBookshelf(level, checkPos)) {
 					level.addParticle(
 							ParticleTypes.ENCHANT,
 							pos.getX() + 0.5,

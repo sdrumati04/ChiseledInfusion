@@ -10,6 +10,7 @@
   "message.chiseledinfusion.not_enough_catalyst": "Not enough catalyst (%sx %s)",
   "message.chiseledinfusion.not_enough_bookshelves": "Not enough bookshelves (%s/%s)",
   "message.chiseledinfusion.no_books_found": "No enchanted books nearby",
+  "message.chiseledinfusion.not_applicable": "No applicable enchantments for this item",
   "message.chiseledinfusion.max_enchantments": "Maximum level reached",
   "message.chiseledinfusion.success": "Infusion complete!"
 }
