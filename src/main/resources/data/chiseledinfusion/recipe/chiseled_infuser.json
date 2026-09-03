@@ -2,12 +2,12 @@
   "type": "minecraft:crafting_shaped",
   "category": "misc",
   "key": {
-    "B": "minecraft:chiseled_bookshelf",
+    "C": "minecraft:red_carpet",
     "D": "minecraft:diamond",
     "O": "minecraft:obsidian"
   },
   "pattern": [
-    " B ",
+    " C ",
     "DOD",
     "OOO"
   ],
