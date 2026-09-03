@@ -2,11 +2,14 @@
   "block.chiseledinfusion.chiseled_infuser": "Chiseled Infusion Table",
   "item.chiseledinfusion.chiseled_infuser": "Chiseled Infusion Table",
   "itemGroup.chiseledinfusion": "Chiseled Infusion",
+  "message.chiseledinfusion.cost_preview": "%s Levels, %sx %s",
+  "message.chiseledinfusion.cost_preview_with_enchants": "%s • %s Levels, %sx %s",
+  "message.chiseledinfusion.requires_crying_obsidian_unlock": "Requires Crying Obsidian below",
+  "message.chiseledinfusion.not_enough_both": "Not enough XP and catalyst (%s lvl, %sx %s)",
   "message.chiseledinfusion.not_enough_xp": "Not enough XP (%s lvl)",
   "message.chiseledinfusion.not_enough_catalyst": "Not enough catalyst (%sx %s)",
+  "message.chiseledinfusion.not_enough_bookshelves": "Not enough bookshelves (%s/%s)",
   "message.chiseledinfusion.no_books_found": "No enchanted books nearby",
-  "message.chiseledinfusion.max_enchantments": "No upgrades available",
-  "message.chiseledinfusion.success": "Infused! (+%s)",
-  "message.chiseledinfusion.no_enchantments": "No enchantments",
-  "message.chiseledinfusion.preview_ready": "✦ Infuse: +%s (%s lvl, %sx %s)"
+  "message.chiseledinfusion.max_enchantments": "Maximum level reached",
+  "message.chiseledinfusion.success": "Infusion complete!"
 }

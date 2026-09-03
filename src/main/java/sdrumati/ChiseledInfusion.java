@@ -11,7 +11,6 @@ import net.minecraft.core.Holder;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.network.chat.Component;
-import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
@@ -29,12 +28,15 @@ import net.minecraft.world.item.Items;
 import net.minecraft.world.item.enchantment.Enchantment;
 import net.minecraft.world.item.enchantment.ItemEnchantments;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.entity.ChiseledBookShelfBlockEntity;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.HitResult;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import sdrumati.block.ChiseledInfuserBlock;
 import sdrumati.config.ModConfig;
 import sdrumati.init.ModBlocks;
 
@@ -43,7 +45,10 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class ChiseledInfusion implements ModInitializer {
 	public static final String MOD_ID = "chiseledinfusion";
@@ -53,6 +58,9 @@ public class ChiseledInfusion implements ModInitializer {
 
 	// Track table positions that currently host a floating item
 	private static final Set<BlockPos> ACTIVE_TABLES = Collections.synchronizedSet(new HashSet<>());
+
+	// Suppress stare preview temporarily after a click so the player can read click feedback (success/failure)
+	private static final Map<UUID, Long> PREVIEW_SUPPRESS_UNTIL = new ConcurrentHashMap<>();
 
 	public static AABB getTableItemBox(BlockPos pos) {
 		return new AABB(pos.getX(), pos.getY() + 0.2, pos.getZ(), pos.getX() + 1.0, pos.getY() + 1.5, pos.getZ() + 1.0);
@@ -156,6 +164,11 @@ public class ChiseledInfusion implements ModInitializer {
 	}
 
 	private static void checkPlayerLookingAtTable(ServerPlayer player, ServerLevel level) {
+		// If player recently clicked, do not overwrite their action bar message yet
+		if (level.getGameTime() < PREVIEW_SUPPRESS_UNTIL.getOrDefault(player.getUUID(), 0L)) {
+			return;
+		}
+
 		HitResult hit = player.pick(5.0D, 0.0F, false);
 		if (hit.getType() != HitResult.Type.BLOCK || !(hit instanceof BlockHitResult blockHit)) {
 			return;
@@ -172,20 +185,48 @@ public class ChiseledInfusion implements ModInitializer {
 		}
 
 		ItemStack tableItem = items.get(0).getItem();
-		ItemStack held = player.getMainHandItem();
 		ModConfig config = ModConfig.INSTANCE;
-		Item catalystItem = config.getCatalystItem();
 
-		if (held.is(catalystItem)) {
-			// Staring with catalyst: show infusion preview & cost
-			displayInfusionPreview(player, level, pos, tableItem, held, config);
-		} else {
-			// Staring with empty hand or any other item: show item enchantments
-			displayItemEnchantments(player, tableItem);
-		}
+		// Show cost and enchantment preview by default whenever looking at the table with an item on it
+		displayInfusionPreview(player, level, pos, tableItem, config);
 	}
 
-	private static record InfusionScanResult(int booksFound, int upgradesApplied, ItemEnchantments.Mutable mutableEnchants, List<BlockPos> contributingBookshelves) {}
+	public static int countNormalBookshelves(Level world, BlockPos pos) {
+		int count = 0;
+		for (BlockPos offset : ChiseledInfuserBlock.BOOKSHELF_OFFSETS) {
+			BlockPos checkPos = pos.offset(offset);
+			if (world.getBlockState(checkPos).is(Blocks.BOOKSHELF)) {
+				// Corner bookshelves are counted directly so they are never blocked by line-of-sight
+				if (Math.abs(offset.getX()) == 2 && Math.abs(offset.getZ()) == 2) {
+					count++;
+					continue;
+				}
+
+				BlockPos midPos = pos.offset(offset.getX() / 2, offset.getY(), offset.getZ() / 2);
+				BlockState midState = world.getBlockState(midPos);
+				if (midState.is(BlockTags.ENCHANTMENT_POWER_TRANSMITTER)
+						|| midState.is(Blocks.BOOKSHELF)
+						|| world.getBlockEntity(midPos) instanceof ChiseledBookShelfBlockEntity) {
+					count++;
+				}
+			}
+		}
+		return Math.min(15, count);
+	}
+
+	private static record InfusionScanResult(
+			int booksFound,
+			int upgradesApplied,
+			int totalXpCost,
+			int totalCatalystCost,
+			int bookshelfCount,
+			boolean hasCryingObsidian,
+			boolean needsCryingObsidian,
+			List<Component> appliedEnchantments,
+			ItemEnchantments.Mutable mutableEnchants,
+			List<BlockPos> contributingBookshelves
+	) {}
+
 	private static InfusionScanResult scanInfusion(Level world, BlockPos pos, ItemStack tableItem, ModConfig config) {
 		boolean isEnchantedBook = tableItem.is(Items.ENCHANTED_BOOK);
 		ItemEnchantments currentEnchants = isEnchantedBook
@@ -193,8 +234,10 @@ public class ChiseledInfusion implements ModInitializer {
 				: tableItem.getOrDefault(DataComponents.ENCHANTMENTS, ItemEnchantments.EMPTY);
 		ItemEnchantments.Mutable mutable = new ItemEnchantments.Mutable(currentEnchants);
 
+		int bookshelfCount = countNormalBookshelves(world, pos);
+		boolean hasCryingObsidian = world.getBlockState(pos.below()).is(Blocks.CRYING_OBSIDIAN);
+
 		int booksFound = 0;
-		int upgradesApplied = 0;
 		List<BlockPos> contributingBookshelves = new ArrayList<>();
 
 		int rHoriz = config.scanRadiusHorizontal;
@@ -219,8 +262,8 @@ public class ChiseledInfusion implements ModInitializer {
 									for (Holder<Enchantment> ench : stored.keySet()) {
 										int currentLvl = mutable.getLevel(ench);
 										int bookLvl = stored.getLevel(ench);
+
 										if (bookLvl > currentLvl) {
-											upgradesApplied++;
 											shelfContributed = true;
 											mutable.set(ench, bookLvl);
 										}
@@ -236,33 +279,93 @@ public class ChiseledInfusion implements ModInitializer {
 			}
 		}
 
-		return new InfusionScanResult(booksFound, upgradesApplied, mutable, contributingBookshelves);
+		int upgradesApplied = 0;
+		int totalXpCost = 0;
+		int totalCatalystCost = 0;
+		List<Component> appliedEnchantments = new ArrayList<>();
+
+		for (Holder<Enchantment> ench : mutable.keySet()) {
+			int beforeLvl = currentEnchants.getLevel(ench);
+			int targetLvl = mutable.getLevel(ench);
+			if (targetLvl > beforeLvl) {
+				upgradesApplied++;
+				totalXpCost += targetLvl * config.xpMultiplierPerLevel;
+				totalCatalystCost += config.lapisCostPerUpgrade;
+				appliedEnchantments.add(Enchantment.getFullname(ench, targetLvl));
+			}
+		}
+
+		if (config.maxXpCost > 0 && totalXpCost > config.maxXpCost) {
+			totalXpCost = config.maxXpCost;
+		}
+
+		// Detect if Crying Obsidian is needed (incompatible enchantments or levels exceeding vanilla cap)
+		boolean hasIncompatible = false;
+		boolean hasOverCap = false;
+
+		List<Holder<Enchantment>> enchantsList = new ArrayList<>(mutable.keySet());
+		for (int i = 0; i < enchantsList.size(); i++) {
+			Holder<Enchantment> e1 = enchantsList.get(i);
+			int lvl = mutable.getLevel(e1);
+			if (lvl > e1.value().getMaxLevel()) {
+				hasOverCap = true;
+			}
+			for (int j = i + 1; j < enchantsList.size(); j++) {
+				Holder<Enchantment> e2 = enchantsList.get(j);
+				if (!Enchantment.areCompatible(e1, e2)) {
+					hasIncompatible = true;
+				}
+			}
+		}
+
+		boolean needsCryingObsidian = !hasCryingObsidian && (hasIncompatible || hasOverCap);
+
+		return new InfusionScanResult(booksFound, upgradesApplied, totalXpCost, totalCatalystCost, bookshelfCount, hasCryingObsidian, needsCryingObsidian, appliedEnchantments, mutable, contributingBookshelves);
 	}
 
-	private static void displayInfusionPreview(ServerPlayer player, ServerLevel level, BlockPos pos, ItemStack tableItem, ItemStack held, ModConfig config) {
-		boolean isCreative = player.getAbilities().instabuild;
-		int requiredXP = config.xpLevelsCost;
-		int requiredCatalyst = config.lapisCost;
-		Item catalystItem = config.getCatalystItem();
-
-		if (player.experienceLevel < requiredXP && !isCreative) {
-			sendActionBar(player, Component.translatable("message.chiseledinfusion.not_enough_xp", requiredXP).withStyle(ChatFormatting.RED));
-			return;
+	private static int countCatalystInInventory(Player player, Item catalystItem) {
+		int count = 0;
+		for (int i = 0; i < player.getInventory().getContainerSize(); i++) {
+			ItemStack stack = player.getInventory().getItem(i);
+			if (stack.is(catalystItem)) {
+				count += stack.getCount();
+			}
 		}
+		return count;
+	}
 
-		if (held.getCount() < requiredCatalyst && !isCreative) {
-			sendActionBar(player, Component.translatable("message.chiseledinfusion.not_enough_catalyst", requiredCatalyst, catalystItem.getName(held)).withStyle(ChatFormatting.RED));
-			return;
-		}
-
+	private static void displayInfusionPreview(ServerPlayer player, ServerLevel level, BlockPos pos, ItemStack tableItem, ModConfig config) {
 		InfusionScanResult scan = scanInfusion(level, pos, tableItem, config);
 		if (scan.booksFound() == 0) {
-			sendActionBar(player, Component.translatable("message.chiseledinfusion.no_books_found").withStyle(ChatFormatting.RED));
-		} else if (scan.upgradesApplied() == 0) {
-			sendActionBar(player, Component.translatable("message.chiseledinfusion.max_enchantments").withStyle(ChatFormatting.YELLOW));
-		} else {
-			sendActionBar(player, Component.translatable("message.chiseledinfusion.preview_ready", scan.upgradesApplied(), requiredXP, requiredCatalyst, catalystItem.getName(held)).withStyle(ChatFormatting.AQUA));
+			sendActionBar(player, Component.translatable("message.chiseledinfusion.no_books_found").withStyle(ChatFormatting.GRAY));
+			return;
 		}
+
+		if (scan.upgradesApplied() == 0) {
+			sendActionBar(player, Component.translatable("message.chiseledinfusion.max_enchantments").withStyle(ChatFormatting.GRAY));
+			return;
+		}
+
+		Item catalystItem = config.getCatalystItem();
+		int catalystCount = countCatalystInInventory(player, catalystItem);
+
+		boolean isCreative = player.getAbilities().instabuild;
+		boolean hasXp = isCreative || player.experienceLevel >= scan.totalXpCost();
+		boolean hasCatalyst = isCreative || catalystCount >= scan.totalCatalystCost();
+		int maxLevelAllowed = scan.bookshelfCount() >= 15 ? Integer.MAX_VALUE : scan.bookshelfCount() * 2;
+		boolean hasEnoughBookshelves = isCreative || scan.totalXpCost() <= maxLevelAllowed;
+
+		// Preview turns RED if unaffordable OR if Crying Obsidian is required to unlock incompatible/over-cap enchants
+		boolean canAfford = hasXp && hasCatalyst && hasEnoughBookshelves && !scan.needsCryingObsidian();
+		ChatFormatting color = canAfford ? ChatFormatting.GREEN : ChatFormatting.RED;
+
+		Component catalystName = catalystItem.getName(new ItemStack(catalystItem));
+		Component enchantsText = scan.appliedEnchantments().stream()
+				.reduce((c1, c2) -> Component.empty().append(c1).append(", ").append(c2))
+				.orElse(Component.empty());
+
+		sendActionBar(player, Component.translatable("message.chiseledinfusion.cost_preview_with_enchants",
+				enchantsText, scan.totalXpCost(), scan.totalCatalystCost(), catalystName).withStyle(color));
 	}
 
 	private static void secureTableItem(ItemEntity item, BlockPos pos) {
@@ -272,7 +375,7 @@ public class ChiseledInfusion implements ModInitializer {
 		item.noPhysics = true;
 		item.setUnlimitedLifetime();
 		item.setDeltaMovement(0, 0, 0);
-		
+
 		double targetX = pos.getX() + 0.5;
 		double targetY = pos.getY() + ITEM_Y_OFFSET;
 		double targetZ = pos.getZ() + 0.5;
@@ -301,6 +404,12 @@ public class ChiseledInfusion implements ModInitializer {
 		} else {
 			player.sendSystemMessage(message);
 		}
+	}
+
+	private static void sendClickFeedback(Player player, Level world, Component message) {
+		// Keep click message on screen for 45 ticks (~2.25s) before staring preview resumes
+		PREVIEW_SUPPRESS_UNTIL.put(player.getUUID(), world.getGameTime() + 45L);
+		sendActionBar(player, message);
 	}
 
 	private static boolean isLineOfSightClear(Level world, BlockPos tablePos, int dx, int dy, int dz) {
@@ -347,57 +456,90 @@ public class ChiseledInfusion implements ModInitializer {
 		}
 
 		ItemStack tableItem = currentItemEntity.getItem();
-
-		// Feature: Inspection via Sneak + Right-Click on occupied table (shows current enchantments)
-		if (player.isShiftKeyDown()) {
-			displayItemEnchantments(player, tableItem);
-			return InteractionResult.SUCCESS;
-		}
-
 		Item catalystItem = config.getCatalystItem();
 
 		// Subcase 2A: Player interacts holding Catalyst (default Lapis Lazuli) -> Perform Enchantment Infusion
 		if (held.is(catalystItem)) {
-			int requiredXP = config.xpLevelsCost;
-			int requiredCatalyst = config.lapisCost;
-
-			if (player.experienceLevel < requiredXP && !isCreative) {
-				sendActionBar(player, Component.translatable("message.chiseledinfusion.not_enough_xp", requiredXP).withStyle(ChatFormatting.RED));
-				world.playSound(null, pos, SoundEvents.VILLAGER_NO, SoundSource.PLAYERS, 1.0F, 1.0F);
-				return InteractionResult.SUCCESS;
-			}
-
-			if (held.getCount() < requiredCatalyst && !isCreative) {
-				sendActionBar(player, Component.translatable("message.chiseledinfusion.not_enough_catalyst", requiredCatalyst, catalystItem.getName(held)).withStyle(ChatFormatting.RED));
-				world.playSound(null, pos, SoundEvents.VILLAGER_NO, SoundSource.PLAYERS, 1.0F, 1.0F);
-				return InteractionResult.SUCCESS;
-			}
-
 			InfusionScanResult scan = scanInfusion(world, pos, tableItem, config);
 
 			if (scan.booksFound() == 0) {
-				sendActionBar(player, Component.translatable("message.chiseledinfusion.no_books_found").withStyle(ChatFormatting.RED));
+				sendClickFeedback(player, world, Component.translatable("message.chiseledinfusion.no_books_found").withStyle(ChatFormatting.RED));
 				world.playSound(null, pos, SoundEvents.VILLAGER_NO, SoundSource.PLAYERS, 1.0F, 1.0F);
 				return InteractionResult.SUCCESS;
 			}
 
-			// Protection against XP/Item waste: if no enchantment can be upgraded, abort cleanly
+			// Protection against XP/Item waste: if no enchantment can be upgraded, notify
 			if (scan.upgradesApplied() == 0) {
-				sendActionBar(player, Component.translatable("message.chiseledinfusion.max_enchantments").withStyle(ChatFormatting.YELLOW));
+				sendClickFeedback(player, world, Component.translatable("message.chiseledinfusion.max_enchantments").withStyle(ChatFormatting.RED));
+				world.playSound(null, pos, SoundEvents.VILLAGER_NO, SoundSource.PLAYERS, 1.0F, 1.0F);
+				return InteractionResult.SUCCESS;
+			}
+
+			// If incompatible or over-cap enchantments are present without Crying Obsidian underneath
+			if (scan.needsCryingObsidian()) {
+				sendClickFeedback(player, world, Component.translatable("message.chiseledinfusion.requires_crying_obsidian_unlock").withStyle(ChatFormatting.RED));
+				world.playSound(null, pos, SoundEvents.VILLAGER_NO, SoundSource.PLAYERS, 1.0F, 1.0F);
+				return InteractionResult.SUCCESS;
+			}
+
+			int maxLevelAllowed = scan.bookshelfCount() >= 15 ? Integer.MAX_VALUE : scan.bookshelfCount() * 2;
+			boolean missingBookshelves = !isCreative && scan.totalXpCost() > maxLevelAllowed;
+
+			if (missingBookshelves) {
+				int needed = Math.min(15, (int) Math.ceil(scan.totalXpCost() / 2.0));
+				sendClickFeedback(player, world, Component.translatable("message.chiseledinfusion.not_enough_bookshelves", scan.bookshelfCount(), needed).withStyle(ChatFormatting.RED));
+				world.playSound(null, pos, SoundEvents.VILLAGER_NO, SoundSource.PLAYERS, 1.0F, 1.0F);
+				return InteractionResult.SUCCESS;
+			}
+
+			int catalystCount = countCatalystInInventory(player, catalystItem);
+			boolean missingXp = player.experienceLevel < scan.totalXpCost() && !isCreative;
+			boolean missingCatalyst = catalystCount < scan.totalCatalystCost() && !isCreative;
+			Component catalystName = catalystItem.getName(new ItemStack(catalystItem));
+
+			if (missingXp && missingCatalyst) {
+				sendClickFeedback(player, world, Component.translatable("message.chiseledinfusion.not_enough_both", scan.totalXpCost(), scan.totalCatalystCost(), catalystName).withStyle(ChatFormatting.RED));
+				world.playSound(null, pos, SoundEvents.VILLAGER_NO, SoundSource.PLAYERS, 1.0F, 1.0F);
+				return InteractionResult.SUCCESS;
+			}
+
+			if (missingXp) {
+				sendClickFeedback(player, world, Component.translatable("message.chiseledinfusion.not_enough_xp", scan.totalXpCost()).withStyle(ChatFormatting.RED));
+				world.playSound(null, pos, SoundEvents.VILLAGER_NO, SoundSource.PLAYERS, 1.0F, 1.0F);
+				return InteractionResult.SUCCESS;
+			}
+
+			if (missingCatalyst) {
+				sendClickFeedback(player, world, Component.translatable("message.chiseledinfusion.not_enough_catalyst", scan.totalCatalystCost(), catalystName).withStyle(ChatFormatting.RED));
 				world.playSound(null, pos, SoundEvents.VILLAGER_NO, SoundSource.PLAYERS, 1.0F, 1.0F);
 				return InteractionResult.SUCCESS;
 			}
 
 			// Deduct costs
 			if (!isCreative) {
-				held.shrink(requiredCatalyst);
-				player.giveExperienceLevels(-requiredXP);
+				int toDeduct = scan.totalCatalystCost();
+				if (held.is(catalystItem)) {
+					int fromHand = Math.min(held.getCount(), toDeduct);
+					held.shrink(fromHand);
+					toDeduct -= fromHand;
+				}
+				if (toDeduct > 0) {
+					for (int i = 0; i < player.getInventory().getContainerSize() && toDeduct > 0; i++) {
+						ItemStack invStack = player.getInventory().getItem(i);
+						if (invStack.is(catalystItem)) {
+							int take = Math.min(invStack.getCount(), toDeduct);
+							invStack.shrink(take);
+							toDeduct -= take;
+						}
+					}
+				}
+				player.giveExperienceLevels(-scan.totalXpCost());
 			}
 
 			boolean isRegularBook = tableItem.is(Items.BOOK);
 			boolean isEnchantedBook = tableItem.is(Items.ENCHANTED_BOOK);
 
-			// Apply enchantments (Sandbox mode: no limits)
+			// Apply enchantments
 			if (isRegularBook) {
 				ItemStack enchantedBook = new ItemStack(Items.ENCHANTED_BOOK);
 				enchantedBook.set(DataComponents.STORED_ENCHANTMENTS, scan.mutableEnchants().toImmutable());
@@ -455,7 +597,7 @@ public class ChiseledInfusion implements ModInitializer {
 
 			float usePitch = 0.95F + (world.getRandom().nextFloat() * 0.1F);
 			world.playSound(null, pos, SoundEvents.ENCHANTMENT_TABLE_USE, SoundSource.BLOCKS, 1.0F, usePitch);
-			sendActionBar(player, Component.translatable("message.chiseledinfusion.success", scan.upgradesApplied()).withStyle(ChatFormatting.GREEN));
+			sendClickFeedback(player, world, Component.translatable("message.chiseledinfusion.success").withStyle(ChatFormatting.GREEN));
 			return InteractionResult.SUCCESS;
 		}
 
@@ -469,29 +611,6 @@ public class ChiseledInfusion implements ModInitializer {
 		float pickupPitch = 1.0F + (world.getRandom().nextFloat() - 0.5F) * 0.2F;
 		world.playSound(null, pos, SoundEvents.ITEM_PICKUP, SoundSource.BLOCKS, 1.0F, pickupPitch);
 		return InteractionResult.SUCCESS;
-	}
-
-	private static void displayItemEnchantments(Player player, ItemStack stack) {
-		boolean isEnchantedBook = stack.is(Items.ENCHANTED_BOOK);
-		ItemEnchantments enchants = isEnchantedBook
-				? stack.getOrDefault(DataComponents.STORED_ENCHANTMENTS, ItemEnchantments.EMPTY)
-				: stack.getOrDefault(DataComponents.ENCHANTMENTS, ItemEnchantments.EMPTY);
-
-		if (enchants.isEmpty()) {
-			sendActionBar(player, Component.translatable("message.chiseledinfusion.no_enchantments").withStyle(ChatFormatting.GRAY));
-			return;
-		}
-
-		MutableComponent summary = Component.literal("✦ ").withStyle(ChatFormatting.AQUA);
-		boolean first = true;
-		for (Holder<Enchantment> ench : enchants.keySet()) {
-			if (!first) {
-				summary.append(Component.literal(" • ").withStyle(ChatFormatting.DARK_GRAY));
-			}
-			summary.append(Enchantment.getFullname(ench, enchants.getLevel(ench)));
-			first = false;
-		}
-		sendActionBar(player, summary);
 	}
 
 	public static Identifier id(String path) {
