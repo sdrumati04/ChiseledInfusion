@@ -1,3 +1,12 @@
 {
-  "block.chiseledinfusion.chiseled_infuser": "Chiseled Infuser"
+  "block.chiseledinfusion.chiseled_infuser": "Chiseled Infusion Table",
+  "item.chiseledinfusion.chiseled_infuser": "Chiseled Infusion Table",
+  "itemGroup.chiseledinfusion": "Chiseled Infusion",
+  "message.chiseledinfusion.not_enough_xp": "Not enough XP (%s lvl)",
+  "message.chiseledinfusion.not_enough_catalyst": "Not enough catalyst (%sx %s)",
+  "message.chiseledinfusion.no_books_found": "No enchanted books nearby",
+  "message.chiseledinfusion.max_enchantments": "No upgrades available",
+  "message.chiseledinfusion.success": "Infused! (+%s)",
+  "message.chiseledinfusion.no_enchantments": "No enchantments",
+  "message.chiseledinfusion.preview_ready": "✦ Infuse: +%s (%s lvl, %sx %s)"
 }
