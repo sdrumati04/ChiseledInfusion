@@ -29,12 +29,12 @@ import net.minecraft.world.item.Items;
 import net.minecraft.world.item.enchantment.Enchantment;
 import net.minecraft.world.item.enchantment.ItemEnchantments;
 import net.minecraft.world.level.Level;
-import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.entity.ChiseledBookShelfBlockEntity;
 import net.minecraft.world.phys.AABB;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import sdrumati.config.ModConfig;
+import sdrumati.init.ModBlocks;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -48,22 +48,23 @@ public class ChiseledInfusion implements ModInitializer {
 	public static final Logger LOGGER = LoggerFactory.getLogger(MOD_ID);
 	public static final String ITEM_TAG = "reenchant_item";
 
-	// Track enchanting table positions that currently host a floating item
+	// Track table positions that currently host a floating item
 	private static final Set<BlockPos> ACTIVE_TABLES = Collections.synchronizedSet(new HashSet<>());
 
 	@Override
 	public void onInitialize() {
 		LOGGER.info("Initializing Chiseled Infusion (Re_Enchanting v2 ported to 26.2)!");
+		ModBlocks.register();
 		ModConfig.load();
 
-		// Intercept right-clicks on the Enchanting Table
+		// Intercept right-clicks on the Chiseled Infuser
 		UseBlockCallback.EVENT.register((player, world, hand, hitResult) -> {
 			if (hand != InteractionHand.MAIN_HAND) {
 				return InteractionResult.PASS;
 			}
 
 			BlockPos pos = hitResult.getBlockPos();
-			if (!world.getBlockState(pos).is(Blocks.ENCHANTING_TABLE)) {
+			if (!world.getBlockState(pos).is(ModBlocks.CHISELED_INFUSER)) {
 				return InteractionResult.PASS;
 			}
 
@@ -76,7 +77,7 @@ public class ChiseledInfusion implements ModInitializer {
 				return InteractionResult.PASS;
 			}
 
-			// If client, return SUCCESS to prevent opening vanilla GUI and notify server
+			// If client, return SUCCESS to prevent opening GUI and notify server
 			if (world.isClientSide()) {
 				return InteractionResult.SUCCESS;
 			}
@@ -86,7 +87,7 @@ public class ChiseledInfusion implements ModInitializer {
 
 		// Ensure item drops immediately if the table is broken by a player
 		PlayerBlockBreakEvents.BEFORE.register((world, player, pos, state, blockEntity) -> {
-			if (state.is(Blocks.ENCHANTING_TABLE) && !world.isClientSide()) {
+			if (state.is(ModBlocks.CHISELED_INFUSER) && !world.isClientSide()) {
 				releaseTableItem(world, pos);
 				ACTIVE_TABLES.remove(pos.immutable());
 			}
@@ -97,10 +98,10 @@ public class ChiseledInfusion implements ModInitializer {
 		ServerEntityEvents.ENTITY_LOAD.register((entity, world) -> {
 			if (entity instanceof ItemEntity item && item.entityTags().contains(ITEM_TAG)) {
 				BlockPos tablePos = item.blockPosition();
-				if (!world.getBlockState(tablePos).is(Blocks.ENCHANTING_TABLE)) {
+				if (!world.getBlockState(tablePos).is(ModBlocks.CHISELED_INFUSER)) {
 					tablePos = tablePos.below();
 				}
-				if (world.getBlockState(tablePos).is(Blocks.ENCHANTING_TABLE)) {
+				if (world.getBlockState(tablePos).is(ModBlocks.CHISELED_INFUSER)) {
 					ACTIVE_TABLES.add(tablePos.immutable());
 					secureTableItem(item, tablePos);
 				} else {
@@ -119,7 +120,7 @@ public class ChiseledInfusion implements ModInitializer {
 				while (it.hasNext()) {
 					BlockPos pos = it.next();
 					if (level.isLoaded(pos)) {
-						if (!level.getBlockState(pos).is(Blocks.ENCHANTING_TABLE)) {
+						if (!level.getBlockState(pos).is(ModBlocks.CHISELED_INFUSER)) {
 							releaseTableItem(level, pos);
 							it.remove();
 						} else {
@@ -195,7 +196,7 @@ public class ChiseledInfusion implements ModInitializer {
 		boolean isCreative = player.getAbilities().instabuild;
 		ModConfig config = ModConfig.INSTANCE;
 
-		// Case 1: No item on the enchanting table
+		// Case 1: No item on the table
 		if (currentItemEntity == null) {
 			if (held.isEmpty()) {
 				return InteractionResult.SUCCESS;
