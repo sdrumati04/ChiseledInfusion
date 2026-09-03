@@ -1,3 +1,12 @@
 {
-  "block.chiseledinfusion.chiseled_infuser": "Infusore Scolpito"
+  "block.chiseledinfusion.chiseled_infuser": "Tavolo d'Infusione Scolpito",
+  "item.chiseledinfusion.chiseled_infuser": "Tavolo d'Infusione Scolpito",
+  "itemGroup.chiseledinfusion": "Chiseled Infusion",
+  "message.chiseledinfusion.not_enough_xp": "Esperienza insufficiente (%s liv.)",
+  "message.chiseledinfusion.not_enough_catalyst": "Catalizzatore insufficiente (%sx %s)",
+  "message.chiseledinfusion.no_books_found": "Nessun libro incantato vicino",
+  "message.chiseledinfusion.max_enchantments": "Nessun potenziamento disponibile",
+  "message.chiseledinfusion.success": "Infuso! (+%s)",
+  "message.chiseledinfusion.no_enchantments": "Nessun incantesimo",
+  "message.chiseledinfusion.preview_ready": "✦ Infondi: +%s (%s liv., %sx %s)"
 }
