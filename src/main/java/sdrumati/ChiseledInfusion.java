@@ -5,6 +5,7 @@ import net.fabricmc.fabric.api.event.lifecycle.v1.ServerEntityEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.fabricmc.fabric.api.event.player.PlayerBlockBreakEvents;
 import net.fabricmc.fabric.api.event.player.UseBlockCallback;
+import net.minecraft.advancements.triggers.CriteriaTriggers;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Holder;
@@ -16,6 +17,7 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
+import net.minecraft.stats.Stats;
 import net.minecraft.tags.BlockTags;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.InteractionHand;
@@ -83,7 +85,25 @@ public class ChiseledInfusion implements ModInitializer {
 			}
 
 			BlockPos pos = hitResult.getBlockPos();
-			if (!world.getBlockState(pos).is(ModBlocks.CHISELED_INFUSER)) {
+			BlockState state = world.getBlockState(pos);
+
+			// Intercept and disable vanilla Enchanting Table if configured (default: disabled)
+			if (!ModConfig.INSTANCE.enableVanillaEnchantingTable && state.is(Blocks.ENCHANTING_TABLE)) {
+				// Allow block placement if sneaking with an item
+				if (player.isShiftKeyDown() && !player.getMainHandItem().isEmpty()) {
+					return InteractionResult.PASS;
+				}
+
+				if (world.isClientSide()) {
+					return InteractionResult.SUCCESS;
+				}
+
+				sendActionBar(player, Component.translatable("message.chiseledinfusion.vanilla_table_disabled").withStyle(ChatFormatting.RED));
+				world.playSound(null, pos, SoundEvents.VILLAGER_NO, SoundSource.BLOCKS, 1.0F, 1.0F);
+				return InteractionResult.SUCCESS;
+			}
+
+			if (!state.is(ModBlocks.CHISELED_INFUSER)) {
 				return InteractionResult.PASS;
 			}
 
@@ -599,6 +619,12 @@ public class ChiseledInfusion implements ModInitializer {
 
 			currentItemEntity.setItem(tableItem);
 			SCAN_CACHE.remove(pos.immutable());
+
+			// Trigger vanilla advancement and statistic for enchanting
+			if (player instanceof ServerPlayer serverPlayer) {
+				CriteriaTriggers.ENCHANTED_ITEM.trigger(serverPlayer, tableItem, scan.totalXpCost());
+			}
+			player.awardStat(Stats.ENCHANT_ITEM);
 
 			// Visual effects: Runic glyphs flying from contributing bookshelves towards the table item
 			if (world instanceof ServerLevel serverLevel) {

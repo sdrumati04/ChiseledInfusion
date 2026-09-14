@@ -19,7 +19,14 @@
 		],
 		"client": [
 			"sdrumati.client.ChiseledInfusionClient"
+		],
+		"modmenu": [
+			"sdrumati.client.integration.ModMenuIntegration"
 		]
+	},
+	"suggests": {
+		"modmenu": "*",
+		"cloth-config": "*"
 	},
 	"mixins": [
 		"chiseledinfusion.mixins.json",

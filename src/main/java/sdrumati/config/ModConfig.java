@@ -18,6 +18,7 @@ public class ModConfig {
 	private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
 	private static final File CONFIG_FILE = new File(FabricLoader.getInstance().getConfigDir().toFile(), "chiseled_infusion.json");
 
+	public boolean enableVanillaEnchantingTable = false;
 	public int xpMultiplierPerLevel = 3;
 	public int lapisCostPerUpgrade = 1;
 	public int maxXpCost = 30;
