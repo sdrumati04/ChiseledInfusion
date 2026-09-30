@@ -3,7 +3,7 @@
 	"id": "chiseledinfusion",
 	"version": "${version}",
 	"name": "Chiseled Infusion",
-	"description": "Reworked enchanting! Diegetic deterministic enchanting using Chiseled Bookshelves - Port of Re_Enchanting v2 to Minecraft 26.2.",
+	"description": "Reworked enchanting! Diegetic deterministic enchanting using Chiseled Bookshelves - Port of Re_Enchanting v2 to Minecraft 26.3.",
 	"authors": [
 		"sdrumati"
 	],
@@ -37,7 +37,7 @@
 	],
 	"depends": {
 		"fabricloader": ">=0.19.5",
-		"minecraft": "~26.2",
+		"minecraft": "~26.3",
 		"java": ">=25",
 		"fabric-api": "*"
 	}

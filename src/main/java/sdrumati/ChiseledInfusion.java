@@ -19,6 +19,7 @@ import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.stats.Stats;
 import net.minecraft.tags.BlockTags;
+import net.minecraft.util.Prediction;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
@@ -74,7 +75,7 @@ public class ChiseledInfusion implements ModInitializer {
 
 	@Override
 	public void onInitialize() {
-		LOGGER.info("Initializing Chiseled Infusion (Re_Enchanting v2 ported to 26.2)!");
+		LOGGER.info("Initializing Chiseled Infusion (Re_Enchanting v2 ported to 26.3)!");
 		ModBlocks.register();
 		ModConfig.load();
 
@@ -421,7 +422,7 @@ public class ChiseledInfusion implements ModInitializer {
 	private static void secureTableItem(ItemEntity item, BlockPos pos) {
 		item.setPickUpDelay(32767);
 		item.setNoGravity(true);
-		item.setInvulnerable(true);
+		item.setPermanentlyInvulnerable(true);
 		item.noPhysics = true;
 		item.setUnlimitedLifetime();
 		item.setDeltaMovement(0, 0, 0);
@@ -436,7 +437,7 @@ public class ChiseledInfusion implements ModInitializer {
 	private static void releaseSingleItem(ItemEntity item) {
 		item.setPickUpDelay(0);
 		item.setNoGravity(false);
-		item.setInvulnerable(false);
+		item.setPermanentlyInvulnerable(false);
 		item.noPhysics = false;
 		item.removeTag(ITEM_TAG);
 	}
@@ -672,7 +673,7 @@ public class ChiseledInfusion implements ModInitializer {
 		ACTIVE_TABLES.remove(pos.immutable());
 		SCAN_CACHE.remove(pos.immutable());
 		if (!player.getInventory().add(toReturn)) {
-			player.drop(toReturn, false);
+			player.drop(toReturn, false, Prediction.SERVER_ONLY);
 		}
 		float pickupPitch = 1.0F + (world.getRandom().nextFloat() - 0.5F) * 0.2F;
 		world.playSound(null, pos, SoundEvents.ITEM_PICKUP, SoundSource.BLOCKS, 1.0F, pickupPitch);
